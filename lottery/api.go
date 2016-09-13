@@ -29,6 +29,7 @@ func (la *lotteryAPI) NextLotteryInfo(ctx context.Context, req *pb.NextLotteryIn
 		Error: pb.ResponseOK(),
 	}
 
+	// if not during lottery, return error
 	if !la.lottery.lotteryFlag {
 		rsp.Error = pb.NewError(pb.ErrorType_NOT_IN_LOTTERY_INTERVAL, "now is not in lottery interval")
 		goto RET
@@ -36,6 +37,34 @@ func (la *lotteryAPI) NextLotteryInfo(ctx context.Context, req *pb.NextLotteryIn
 
 	rsp.StartTime = la.lottery.lotteryStartTime
 	rsp.EndTime = la.lottery.lotteryEndTime
+
+RET:
+	return rsp, nil
+}
+
+func (la *lotteryAPI) SendLotteryNum(ctx context.Context, req *pb.SendLotteryNumReq) (*pb.SendLotteryNumRsp, error) {
+	rsp := &pb.SendLotteryNumRsp{
+		Error: pb.ResponseOK(),
+	}
+
+	var ticket *pb.LotteryTicket
+	var err error
+
+	// if not during lottery, return error
+	if !la.lottery.lotteryFlag {
+		rsp.Error = pb.NewError(pb.ErrorType_NOT_IN_LOTTERY_INTERVAL, "now is not in lottery interval, reject all the lottery")
+		goto RET
+	}
+
+	ticket, err = la.lottery.storage.PutFx(req.Fid, req.Fx)
+	if err == ErrAlreadyInLotteryPool {
+		rsp.Error = pb.NewError(pb.ErrorType_ALREADY_RECEIVED_LOTTERY, err.Error())
+		goto RET
+	} else if err != nil {
+		rsp.Error = pb.NewError(pb.ErrorType_INTERNAL_ERROR, err.Error())
+		goto RET
+	}
+	rsp.Ticket = ticket
 
 RET:
 	return rsp, nil

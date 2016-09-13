@@ -31,6 +31,7 @@ var (
 
 type Lottery struct {
 	gRPCServer *grpc.Server
+	storage    Storage
 
 	lotteryInterval time.Duration
 	lotteryLast     time.Duration
@@ -65,13 +66,35 @@ func NewLottery() *Lottery {
 	lotteryLogger.Infof("get lottery.last: %v", lotteryLast)
 	lot.lotteryLast = lotteryLast
 
+	if lotteryLast >= lotteryInterval {
+		lotteryLogger.Fatalf("one round lottery last time bigger than two round lottery interval")
+	}
+
+	// init storage
+	lot.storage = NewDefaultStorage()
+
 	return lot
 }
 
 // ListenLottery asyncly change lottery time
 func (l *Lottery) ListenLottery() {
 	intervalTicker := time.NewTicker(l.lotteryInterval)
-	var lastTicker *time.Ticker
+
+	lotteryLastCheck := func(ticker *time.Ticker) {
+		for {
+			select {
+			case <-ticker.C:
+				l.lotteryFlag = false
+				l.lotteryStartTime = 0
+				l.lotteryEndTime = 0
+				ticker.Stop()
+
+				// handle lottery result
+
+				return
+			}
+		}
+	}
 
 	for {
 		select {
@@ -83,13 +106,7 @@ func (l *Lottery) ListenLottery() {
 			l.lotteryStartTime = nowTime.Unix()
 			l.lotteryEndTime = nowTime.Add(l.lotteryLast).Unix()
 
-			lastTicker = time.NewTicker(l.lotteryLast)
-		case <-lastTicker.C:
-			l.lotteryFlag = false
-			lastTicker.Stop()
-			lastTicker = nil
-
-			// handle lottery
+			go lotteryLastCheck(time.NewTicker(l.lotteryLast))
 		}
 	}
 }
@@ -100,6 +117,7 @@ func (l *Lottery) Start(srv *grpc.Server) {
 
 	l.gRPCServer = srv
 	pb.RegisterLotteryAPIServer(srv, &lotteryAPI{l})
+	go l.ListenLottery()
 
 	lotteryLogger.Info("lottery service started")
 }
