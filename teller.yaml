@@ -1,11 +1,36 @@
 #################################################################################################
 #
+# server section
+#
+#################################################################################################
+server:
+    # current version of the teller
+    version: "0.1.0"
+
+    # limits the number of operating system threads used by the CA
+    # set to negative to use the system default setting
+    gomaxprocs: -1
+
+    # port the CA services are listening on
+    port: ":7054"
+
+    # TLS certificate and key file paths
+    tls:
+        # whether or not to setup tls connection
+        enabled: false
+        cert:
+            file:
+        key:
+            file:
+#################################################################################################
+#
 # lottery section
 #
 #################################################################################################
 lottery:
   # time interval of lottery, using s,m,h,d
   interval: 25h
+
   # one time lottery will last how many duration
   last: 30m
 #################################################################################################
@@ -14,5 +39,6 @@ lottery:
 #
 #################################################################################################
 logging:
+  server: debug
   lottery: debug
 
