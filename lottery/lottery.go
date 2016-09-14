@@ -1,5 +1,6 @@
 /*
 Copyright Mojing Inc. 2016 All Rights Reserved.
+Written by mint.zhao.chiu@gmail.com. github.com: https://www.github.com/mintzhao
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,13 +78,17 @@ func NewLottery() *Lottery {
 }
 
 // ListenLottery asyncly change lottery time
-func (l *Lottery) ListenLottery() {
+func (l *Lottery) listenLottery() {
+	lotteryLogger.Debugf("begin to listen to lottery ticker")
+
 	intervalTicker := time.NewTicker(l.lotteryInterval)
 
 	lotteryLastCheck := func(ticker *time.Ticker) {
 		for {
 			select {
 			case <-ticker.C:
+				lotteryLogger.Debugf("lottery end at %v", time.Now().UTC())
+
 				l.lotteryFlag = false
 				l.lotteryStartTime = 0
 				l.lotteryEndTime = 0
@@ -100,7 +105,7 @@ func (l *Lottery) ListenLottery() {
 		select {
 		case <-intervalTicker.C:
 			nowTime := time.Now().UTC()
-			lotteryLogger.Debugf("new round of lottery begin..., time: %v", nowTime)
+			lotteryLogger.Debugf("new round of lottery begin at %v", nowTime)
 
 			l.lotteryFlag = true
 			l.lotteryStartTime = nowTime.Unix()
@@ -117,7 +122,7 @@ func (l *Lottery) Start(srv *grpc.Server) {
 
 	l.gRPCServer = srv
 	pb.RegisterLotteryAPIServer(srv, &lotteryAPI{l})
-	go l.ListenLottery()
+	go l.listenLottery()
 
 	lotteryLogger.Info("lottery service started")
 }
