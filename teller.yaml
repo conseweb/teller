@@ -33,6 +33,9 @@ lottery:
 
   # one time lottery will last how many duration
   last: 30m
+
+  # how many ledger will win the seat
+  seat: 108
 #################################################################################################
 #
 # logging section

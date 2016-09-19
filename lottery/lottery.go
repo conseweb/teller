@@ -18,9 +18,11 @@ package lottery
 
 import (
 	"time"
+	"fmt"
 
 	pb "github.com/conseweb/common/protos"
 	"github.com/hyperledger/fabric/flogging"
+	"github.com/looplab/fsm"
 	"github.com/op/go-logging"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
@@ -28,21 +30,31 @@ import (
 
 var (
 	lotteryLogger = logging.MustGetLogger("lottery")
+
+	// lottery fsm states
+	state_ulottery = "ulottery" // un lottery
+	state_dlottery = "dlottery" // during lottery
+	state_hlottery = "hlottery" // handle lottery result
+
+	// lottery fsm events
+	event_beginLottery  = "lottering"   // ulottery --> dlottery
+	event_handleLottery = "calculating" // dlottery --> hlottery
+	event_finishLottery = "finished"    // hlottery --> ulottery
 )
 
+// Lottery
 type Lottery struct {
 	gRPCServer *grpc.Server
-	storage    Storage
+	storageMgr *StorageManager
 
 	lotteryInterval time.Duration
 	lotteryLast     time.Duration
 
-	// whether in lottery mode
-	lotteryFlag bool
-	// lottery start time
-	lotteryStartTime int64
-	// lottery end time
-	lotteryEndTime int64
+	lotteryStartTime int64  // lottery start time
+	lotteryEndTime   int64  // lottery end time
+	curLotteryName   string // current round of lottery name
+
+	lotteryFSM *fsm.FSM
 }
 
 // NewLottery created a new lottery instance
@@ -72,48 +84,87 @@ func NewLottery() *Lottery {
 	}
 
 	// init storage
-	lot.storage = NewDefaultStorage()
+	lot.storageMgr = NewStorageManager(NewInMemoryStorage)
+
+	// init fms
+	lot.lotteryFSM = fsm.NewFSM(state_ulottery, []fsm.EventDesc{
+		fsm.EventDesc{Name: event_beginLottery, Src: []string{state_ulottery}, Dst: state_dlottery},
+		fsm.EventDesc{Name: event_handleLottery, Src: []string{state_dlottery}, Dst: state_hlottery},
+		fsm.EventDesc{Name: event_finishLottery, Src: []string{state_hlottery}, Dst: state_ulottery},
+	}, map[string]fsm.Callback{
+		"before_event": lot.beforeEvent,
+	})
 
 	return lot
+}
+
+// fsm change logger
+func (l *Lottery) beforeEvent(e *fsm.Event) {
+	lotteryLogger.Debugf("lottery calling event[%s], state %s ==> %s", e.Event, e.Src, e.Dst)
 }
 
 // ListenLottery asyncly change lottery time
 func (l *Lottery) listenLottery() {
 	lotteryLogger.Debugf("begin to listen to lottery ticker")
-
 	intervalTicker := time.NewTicker(l.lotteryInterval)
-
-	lotteryLastCheck := func(ticker *time.Ticker) {
-		for {
-			select {
-			case <-ticker.C:
-				lotteryLogger.Debugf("lottery end at %v", time.Now().UTC())
-
-				l.lotteryFlag = false
-				l.lotteryStartTime = 0
-				l.lotteryEndTime = 0
-				ticker.Stop()
-
-				// handle lottery result
-
-				return
-			}
-		}
-	}
 
 	for {
 		select {
 		case <-intervalTicker.C:
 			nowTime := time.Now().UTC()
-			lotteryLogger.Debugf("new round of lottery begin at %v", nowTime)
 
-			l.lotteryFlag = true
-			l.lotteryStartTime = nowTime.Unix()
-			l.lotteryEndTime = nowTime.Add(l.lotteryLast).Unix()
-
-			go lotteryLastCheck(time.NewTicker(l.lotteryLast))
+			l.StartNewLottery(nowTime, l.lotteryLast)
 		}
 	}
+}
+
+func (l *Lottery) lotteryLastCheck(ticker *time.Ticker) {
+	for {
+		select {
+		case <-ticker.C:
+			ticker.Stop()
+			lotteryLogger.Debugf("lottery end at %v", time.Now().UTC())
+
+			// handle lottery result
+			if err := l.lotteryFSM.Event(event_handleLottery); err != nil {
+				lotteryLogger.Fatalf("cant handle lottery: %v", err)
+			}
+
+			// select ledger
+
+			l.lotteryStartTime = 0
+			l.lotteryEndTime = 0
+			l.curLotteryName = ""
+
+			// after handler lottery result
+			if err := l.lotteryFSM.Event(event_finishLottery); err != nil {
+				lotteryLogger.Fatalf("cant finish lottery: %v", err)
+			}
+
+			return
+		}
+	}
+}
+
+// Start a new round of lottery
+func (l *Lottery) StartNewLottery(startTime time.Time, lastInterval time.Duration) error {
+	timeNow := time.Now().UTC()
+	if timeNow.Sub(startTime) > time.Minute {
+		startTime = timeNow
+	}
+	lotteryLogger.Debugf("new round of lottery begin at %v", startTime)
+
+	if err := l.lotteryFSM.Event(event_beginLottery); err != nil {
+		lotteryLogger.Errorf("can't begin lottery: %v", err)
+		return fmt.Errorf("can't begin lottery: %v", err)
+	}
+
+	l.lotteryStartTime = startTime.Unix()
+	l.lotteryEndTime = startTime.Add(lastInterval).Unix()
+	l.curLotteryName = fmt.Sprintf("lottery_%v", startTime.UnixNano())
+
+	go l.lotteryLastCheck(time.NewTicker(lastInterval))
+	return nil
 }
 
 // Start start Lottery api

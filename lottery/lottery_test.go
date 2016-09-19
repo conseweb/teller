@@ -27,6 +27,8 @@ import (
 	"gopkg.in/check.v1"
 )
 
+
+
 func TestALL(t *testing.T) {
 	check.TestingT(t)
 }
@@ -65,14 +67,14 @@ func (t *LotteryTest) TestNextLotteryInfo(c *check.C) {
 	c.Logf("rsp2: %+v", rsp2)
 }
 
-func (t *LotteryTest) TestSendLotteryNum(c *check.C) {
-	rsp1, err := t.api.SendLotteryNum(context.Background(), &pb.SendLotteryNumReq{})
+func (t *LotteryTest) TestSendLotteryFx(c *check.C) {
+	rsp1, err := t.api.SendLotteryFx(context.Background(), &pb.SendLotteryFxReq{})
 	c.Check(err, check.IsNil)
 	c.Check(rsp1.Error.OK(), check.Equals, false)
 	c.Logf("rsp1: %+v", rsp1)
 
 	time.Sleep(time.Second * 5)
-	rsp2, err := t.api.SendLotteryNum(context.Background(), &pb.SendLotteryNumReq{
+	rsp2, err := t.api.SendLotteryFx(context.Background(), &pb.SendLotteryFxReq{
 		Fid: "123456789",
 		Fx:  123456789,
 	})
@@ -84,7 +86,7 @@ func (t *LotteryTest) TestSendLotteryNum(c *check.C) {
 	c.Check(rsp2.Ticket.Idx, check.Equals, int64(0))
 	c.Logf("rsp2: %+v", rsp2)
 
-	rsp3, err := t.api.SendLotteryNum(context.Background(), &pb.SendLotteryNumReq{
+	rsp3, err := t.api.SendLotteryFx(context.Background(), &pb.SendLotteryFxReq{
 		Fid: "123456789",
 		Fx:  123456789,
 	})
@@ -92,7 +94,7 @@ func (t *LotteryTest) TestSendLotteryNum(c *check.C) {
 	c.Check(rsp3.Error.OK(), check.Equals, false)
 	c.Logf("rsp3: %+v", rsp3)
 
-	rsp4, err := t.api.SendLotteryNum(context.Background(), &pb.SendLotteryNumReq{
+	rsp4, err := t.api.SendLotteryFx(context.Background(), &pb.SendLotteryFxReq{
 		Fid: "1234567890",
 		Fx:  123456789,
 	})
