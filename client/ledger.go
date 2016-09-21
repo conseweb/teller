@@ -17,8 +17,9 @@ limitations under the License.
 package client
 
 import (
-	pb "github.com/conseweb/common/protos"
 	"sort"
+
+	pb "github.com/conseweb/common/protos"
 )
 
 var (
@@ -27,7 +28,6 @@ var (
 
 type LotteryLxs []*pb.LotteryLx
 
-func (lxs *LotteryLxs) Len() int           { return len(lxs) }
-func (lxs *LotteryLxs) Less(i, j int) bool { return lxs[i].Dist < lxs[j].Dist }
-func (lxs *LotteryLxs) Swap(i, j int)      { lxs[i], lxs[j] = lxs[j], lxs[i] }
-
+func (lxs LotteryLxs) Len() int           { return len(lxs) }
+func (lxs LotteryLxs) Less(i, j int) bool { return lxs[i].Dist < lxs[j].Dist }
+func (lxs LotteryLxs) Swap(i, j int)      { lxs[i], lxs[j] = lxs[j], lxs[i] }

@@ -17,8 +17,8 @@ limitations under the License.
 package lottery
 
 import (
-	"time"
 	"fmt"
+	"time"
 
 	pb "github.com/conseweb/common/protos"
 	"github.com/hyperledger/fabric/flogging"
@@ -119,31 +119,30 @@ func (l *Lottery) listenLottery() {
 }
 
 func (l *Lottery) lotteryLastCheck(ticker *time.Ticker) {
-	for {
-		select {
-		case <-ticker.C:
-			ticker.Stop()
-			lotteryLogger.Debugf("lottery end at %v", time.Now().UTC())
+	<-ticker.C
+	ticker.Stop()
+	lotteryLogger.Debugf("lottery end at %v", time.Now().UTC())
 
-			// handle lottery result
-			if err := l.lotteryFSM.Event(event_handleLottery); err != nil {
-				lotteryLogger.Fatalf("cant handle lottery: %v", err)
-			}
-
-			// select ledger
-
-			l.lotteryStartTime = 0
-			l.lotteryEndTime = 0
-			l.curLotteryName = ""
-
-			// after handler lottery result
-			if err := l.lotteryFSM.Event(event_finishLottery); err != nil {
-				lotteryLogger.Fatalf("cant finish lottery: %v", err)
-			}
-
-			return
-		}
+	// handle lottery result
+	if err := l.lotteryFSM.Event(event_handleLottery); err != nil {
+		lotteryLogger.Errorf("cant handle lottery: %v", err)
+		return
 	}
+
+	l.storageMgr.HandleLottery(l.curLotteryName, viper.GetInt("lottery.seat"), viper.GetInt("lottery.worker"))
+	l.storageMgr.DisplayLotteryResult(l.curLotteryName)
+
+	l.lotteryStartTime = 0
+	l.lotteryEndTime = 0
+	l.curLotteryName = ""
+
+	// after handler lottery result
+	if err := l.lotteryFSM.Event(event_finishLottery); err != nil {
+		lotteryLogger.Errorf("cant finish lottery: %v", err)
+		return
+	}
+
+	return
 }
 
 // Start a new round of lottery
@@ -152,7 +151,7 @@ func (l *Lottery) StartNewLottery(startTime time.Time, lastInterval time.Duratio
 	if timeNow.Sub(startTime) > time.Minute {
 		startTime = timeNow
 	}
-	lotteryLogger.Debugf("new round of lottery begin at %v", startTime)
+	lotteryLogger.Debugf("lottery begin at %v", startTime)
 
 	if err := l.lotteryFSM.Event(event_beginLottery); err != nil {
 		lotteryLogger.Errorf("can't begin lottery: %v", err)
