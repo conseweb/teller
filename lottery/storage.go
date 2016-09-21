@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	pb "github.com/conseweb/common/protos"
+	"github.com/conseweb/common/semaphore"
 	"github.com/conseweb/teller/client"
 )
 
@@ -34,13 +35,13 @@ type StorageCreator func(string) Storage
 type StorageManager struct {
 	sync.Mutex
 	storages map[string]Storage
-	creator StorageCreator
+	creator  StorageCreator
 }
 
 // NewStorageManager return a storage manager with storage creator
 func NewStorageManager(creator StorageCreator) *StorageManager {
 	return &StorageManager{
-		creator: creator,
+		creator:  creator,
 		storages: make(map[string]Storage),
 	}
 }
@@ -63,6 +64,44 @@ func (mgr *StorageManager) GetStorage(name string) Storage {
 	return storage
 }
 
+// HandleLottery
+func (mgr *StorageManager) HandleLottery(name string, winnerNum, worker int) {
+	s := mgr.GetStorage(name)
+
+	s.SelectCandidate(winnerNum)
+	s.ChooseFarmerVote(worker)
+	s.Persist()
+}
+
+// DisplayLotteryResult
+func (mgr *StorageManager) DisplayLotteryResult(name string) {
+	s := mgr.GetStorage(name)
+
+	lotteryLogger.Infof("Display Lottery[%s] Result Start\n", name)
+	lotteryLogger.Infof("END R: %d\n", s.GetEndR())
+	ledgers := s.GetWonLedgers()
+	farmers := s.GetFxs()
+	lotteryLogger.Infof("Lottery Farmer vote display start==========================================================\n")
+	for idx, fx := range farmers {
+		lotteryLogger.Infof("farmer %d: <ID %s>, <Value %d>, <Candidate %s>", idx, fx.Fid, fx.Value, fx.Candidate)
+	}
+	lotteryLogger.Infof("Lottery Farmer vote display end============================================================\n")
+
+	lotteryLogger.Infof("Lottery selected ledgers, count: %v\n", len(ledgers))
+	for idx, lx := range ledgers {
+		farmerCnt := 0
+		for _, fx := range farmers {
+			if fx.Candidate == lx.Lid {
+				farmerCnt ++
+			}
+		}
+
+		lotteryLogger.Infof("selected ledger %d: <ID %s>, <Value %d>, <Dist %d>, <Vote %d>\n", idx, lx.Lid, lx.Value, lx.Dist, farmerCnt)
+	}
+
+	lotteryLogger.Infof("Display Lottery[%s] Result End\n", name)
+}
+
 var (
 	ErrAlreadyInLotteryPool = errors.New("already put fx into lottery pool")
 )
@@ -74,8 +113,22 @@ type Storage interface {
 	// put ledger random lottery number
 	PutLx(string, uint64) (*pb.LotteryLxTicket, error)
 
-	// vote candidate, won flag indicate the ledger has been selected
-	VoteCandidate(winnerNum int)
+	// GetEndR return finally R
+	GetEndR() uint64
+
+	// select candidate, won flag indicate the ledger has been selected
+	// param[0] stands for how many candidate can be selected
+	SelectCandidate(int)
+
+	// GetWonLedgers return selected ledgers
+	GetWonLedgers() []*pb.LotteryLx
+
+	// choose farmer vote candidate, put into LotteryFx.Candidate
+	// param[0] stands for how many workers work together at the same time
+	ChooseFarmerVote(int)
+
+	// GetFxs return farmer lottery list
+	GetFxs() []*pb.LotteryFx
 
 	// persist current lottery history to a backend, maybe a db or something else
 	Persist() error
@@ -156,13 +209,22 @@ func (s *InMemoryStorage) PutLx(lid string, lx uint64) (*pb.LotteryLxTicket, err
 	}, nil
 }
 
-// VoteCandidate select some(winnerNum) candidate to record the blockchain
+// GetEndR return finally R
+func (s *InMemoryStorage) GetEndR() uint64 {
+	s.Lock()
+	defer s.Unlock()
+
+	return s.r
+}
+
+// SelectCandidate select some(winnerNum) candidate to record the blockchain
 // and give back coinbase transaction(lepuscoin) for a period
-func (s *InMemoryStorage) VoteCandidate(winnerNum int) {
+func (s *InMemoryStorage) SelectCandidate(winnerNum int) {
 	s.Lock()
 	defer s.Unlock()
 
 	lenCandidate := len(s.lxs)
+	lotteryLogger.Debugf("ledger candidates len: %d, ledger seat: %d", lenCandidate, winnerNum)
 
 	// all the candidate are been selected
 	if lenCandidate <= winnerNum {
@@ -170,18 +232,82 @@ func (s *InMemoryStorage) VoteCandidate(winnerNum int) {
 			s.lxs[idx].Won = true
 		}
 	} else {
-		for idx, lx := range s.lxs {
-			s.lxs[idx].Dist = lx.Value ^ s.r
+		for idx, _ := range s.lxs {
+			s.lxs[idx].Dist = s.lxs[idx].Value ^ s.r
+			lotteryLogger.Debugf("calc ledger %d: %s, %d, %d", idx, s.lxs[idx].Lid, s.lxs[idx].Value, s.lxs[idx].Dist)
 		}
 
 		sort.Sort(client.LotteryLxs(s.lxs))
-		for idx, _ := range s.lxs[:winnerNum-1] {
+		for idx := 0; idx < winnerNum; idx++ {
 			s.lxs[idx].Won = true
 		}
 	}
 }
 
+// GetWonLedgers return selected ledgers
+func (s *InMemoryStorage) GetWonLedgers() []*pb.LotteryLx {
+	s.Lock()
+	defer s.Unlock()
+
+	lxs := make([]*pb.LotteryLx, 0)
+	for _, lx := range s.lxs {
+		if lx.Won {
+			lxs = append(lxs, lx)
+		}
+	}
+
+	return lxs
+}
+
+// ChooseFarmerVote
+func (s *InMemoryStorage) ChooseFarmerVote(worker int) {
+	s.Lock()
+	defer s.Unlock()
+
+	if len(s.lxs) <= 0 {
+		return
+	}
+
+	sema := semaphore.NewSemaphore(worker)
+	for idxF, fx := range s.fxs {
+		sema.Acquire()
+		go func(idxF int, fx *pb.LotteryFx) {
+			defer sema.Release()
+
+			tmpLxs := cloneLxs(s.lxs)
+			for idxL, lx := range tmpLxs {
+				tmpLxs[idxL].Dist = lx.Value ^ fx.Value
+			}
+
+			sort.Sort(client.LotteryLxs(tmpLxs))
+			s.fxs[idxF].Candidate = tmpLxs[0].Lid
+		}(idxF, fx)
+	}
+}
+
+func (s *InMemoryStorage) GetFxs() []*pb.LotteryFx {
+	s.Lock()
+	defer s.Unlock()
+
+	return s.fxs
+}
+
 // persist current lottery history to a backend, maybe a db or something else
 func (s *InMemoryStorage) Persist() error {
 	return nil
+}
+
+// deep copy form src to dst
+func cloneLxs(src []*pb.LotteryLx) (dst []*pb.LotteryLx) {
+	dst = make([]*pb.LotteryLx, 0)
+	for _, lx := range src {
+		dst = append(dst, &pb.LotteryLx{
+			Lid:   lx.Lid,
+			Value: lx.Value,
+			Dist:  lx.Dist,
+			Won:   lx.Won,
+		})
+	}
+
+	return
 }

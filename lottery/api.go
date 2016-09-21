@@ -69,7 +69,7 @@ func (la *lotteryAPI) SendLotteryFx(ctx context.Context, req *pb.SendLotteryFxRe
 	}
 
 	role = pb.DeviceFor(snowflake.ParseRole(fid))
-	lotteryLogger.Debugf("fid: %v, role: %v", fid, role)
+	lotteryLogger.Debugf("request: %+v, fid: %v, role: %v", req, fid, role)
 	if role != pb.DeviceFor_FARMER {
 		rsp.Error = pb.NewError(pb.ErrorType_INAPPROPRIATE_DEVICE_ROLE, "device must be a farmer")
 		goto RET
@@ -114,7 +114,7 @@ func (la *lotteryAPI) SendLotteryLx(ctx context.Context, req *pb.SendLotteryLxRe
 	}
 
 	role = pb.DeviceFor(snowflake.ParseRole(lid))
-	lotteryLogger.Debugf("lid: %v, role: %v", lid, role)
+	lotteryLogger.Debugf("request: %+v, lid: %v, role: %v", req, lid, role)
 	if role != pb.DeviceFor_LEDGER {
 		rsp.Error = pb.NewError(pb.ErrorType_INAPPROPRIATE_DEVICE_ROLE, "device must be a ledger")
 		goto RET
@@ -148,20 +148,23 @@ func (la *lotteryAPI) StartLottery(ctx context.Context, req *pb.StartLotteryReq)
 		Error: pb.ResponseOK(),
 	}
 
-	// if not ulottery, return error
-	if !la.lottery.lotteryFSM.Is(state_ulottery) {
-		rsp.Error = pb.NewError(pb.ErrorType_IN_LOTTERY_INTERVAL, "now is in lottery interval, please waiting")
-		goto RET
-	}
-
 	startTime := time.Unix(req.StartUTC, 0).UTC()
 	lastInterval, err := time.ParseDuration(req.LastInterval)
 	if err != nil {
+		lotteryLogger.Errorf("parse lastInterval return error: %v", err)
 		rsp.Error = pb.NewErrorf(pb.ErrorType_INVALID_PARAM, "parse lastInterval return error: %v", err)
 		goto RET
 	}
 
+	// if not ulottery, return error
+	if !la.lottery.lotteryFSM.Is(state_ulottery) {
+		lotteryLogger.Warning("now is in lottery interval, please waiting...")
+		rsp.Error = pb.NewError(pb.ErrorType_IN_LOTTERY_INTERVAL, "now is in lottery interval, please waiting")
+		goto RET
+	}
+
 	if err := la.lottery.StartNewLottery(startTime, lastInterval); err != nil {
+		lotteryLogger.Errorf("manual start lottery return error: %v", err)
 		rsp.Error = pb.NewError(pb.ErrorType_INTERNAL_ERROR, err.Error())
 		goto RET
 	}
@@ -169,3 +172,5 @@ func (la *lotteryAPI) StartLottery(ctx context.Context, req *pb.StartLotteryReq)
 RET:
 	return rsp, nil
 }
+
+

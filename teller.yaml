@@ -12,7 +12,7 @@ server:
     gomaxprocs: -1
 
     # port the CA services are listening on
-    port: ":7054"
+    port: ":7058"
 
     # TLS certificate and key file paths
     tls:
@@ -29,13 +29,16 @@ server:
 #################################################################################################
 lottery:
   # time interval of lottery, using s,m,h,d
-  interval: 25h
+  interval: 2m
 
   # one time lottery will last how many duration
-  last: 30m
+  last: 30s
 
   # how many ledger will win the seat
-  seat: 108
+  seat: 10
+
+  # how many worker will handle farmer's vote at the same time
+  worker: 16
 #################################################################################################
 #
 # logging section

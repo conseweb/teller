@@ -58,10 +58,12 @@ func main() {
 	lot = lottery.NewLottery()
 	lot.Start(srv)
 
-	lis, err := net.Listen("tcp", viper.GetString("server.port"))
+	addr := viper.GetString("server.port")
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		logger.Fatalf("Fail to start Teller server: %v", err)
 	}
+	logger.Infof("Teller started at %v", addr)
 
 	go srv.Serve(lis)
 	exec.HandleSignal(lot.Stop)

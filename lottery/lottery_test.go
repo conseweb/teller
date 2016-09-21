@@ -19,15 +19,15 @@ package lottery
 import (
 	"testing"
 	"time"
+	"strconv"
 
 	pb "github.com/conseweb/common/protos"
+	"github.com/conseweb/common/snowflake"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"gopkg.in/check.v1"
 )
-
-
 
 func TestALL(t *testing.T) {
 	check.TestingT(t)
@@ -40,6 +40,8 @@ type LotteryTest struct {
 func (t *LotteryTest) SetUpTest(c *check.C) {
 	viper.Set("lottery.interval", "4s")
 	viper.Set("lottery.last", "2s")
+	viper.Set("lottery.seat", 4)
+	viper.Set("lottery.worker", 16)
 	viper.Set("logging.lottery", "debug")
 
 	lottery := NewLottery()
@@ -105,4 +107,56 @@ func (t *LotteryTest) TestSendLotteryFx(c *check.C) {
 	c.Check(rsp4.Ticket.Mr, check.Equals, uint64(0))
 	c.Check(rsp4.Ticket.Idx, check.Equals, int64(1))
 	c.Logf("rsp4: %+v", rsp4)
+}
+
+func (t *LotteryTest) TestSendLotteryLx(c *check.C) {
+	rsp1, err := t.api.SendLotteryLx(context.Background(), &pb.SendLotteryLxReq{})
+	c.Check(err, check.IsNil)
+	c.Check(rsp1.Error.OK(), check.Equals, false)
+	c.Logf("rsp1: %+v", rsp1)
+
+	time.Sleep(time.Second * 5)
+	id, err := snowflake.NextID(int64(pb.DeviceFor_LEDGER), 0)
+	c.Check(err, check.IsNil)
+	lid := strconv.FormatUint(id, 16)
+	rsp2, err := t.api.SendLotteryLx(context.Background(), &pb.SendLotteryLxReq{
+		Lid: lid,
+		Lx:  123456789,
+	})
+	c.Check(err, check.IsNil)
+	c.Check(rsp2.Error.OK(), check.Equals, true)
+	c.Check(rsp2.Ticket.Lid, check.Equals, lid)
+	c.Check(rsp2.Ticket.Lx, check.Equals, uint64(123456789))
+	c.Logf("rsp2: %+v", rsp2)
+}
+
+func (t *LotteryTest) TestManualStartLottery(c *check.C) {
+	// param error
+	rsp1, err := t.api.StartLottery(context.Background(), &pb.StartLotteryReq{})
+	c.Check(err, check.IsNil)
+	c.Check(rsp1.Error.OK(), check.Equals, false)
+	c.Logf("rsp1: %+v", rsp1)
+
+
+	time.Sleep(time.Second * 5)
+
+	// in lottery, return err
+	rsp2, err := t.api.StartLottery(context.Background(), &pb.StartLotteryReq{
+		StartUTC: time.Now().UTC().Unix(),
+		LastInterval: "2s",
+	})
+	c.Check(err, check.IsNil)
+	c.Check(rsp2.Error.OK(), check.Equals, false)
+	c.Logf("rsp2: %+v", rsp2)
+
+	time.Sleep(time.Second * 2)
+
+	// not in lottery, return ok
+	rsp3, err := t.api.StartLottery(context.Background(), &pb.StartLotteryReq{
+		StartUTC: time.Now().UTC().Unix(),
+		LastInterval: "2s",
+	})
+	c.Check(err, check.IsNil)
+	c.Check(rsp3.Error.OK(), check.Equals, true)
+	c.Logf("rsp3: %+v", rsp3)
 }
