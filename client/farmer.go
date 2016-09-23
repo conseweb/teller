@@ -17,3 +17,19 @@ limitations under the License.
 
 // relate to farmer lottery something together
 package client
+
+import (
+	"sort"
+
+	pb "github.com/conseweb/common/protos"
+)
+
+var (
+	_ sort.Interface
+)
+
+type LotteryFxs []*pb.LotteryFx
+
+func (fxs LotteryFxs) Len() int           { return len(fxs) }
+func (fxs LotteryFxs) Less(i, j int) bool { return fxs[i].Dist < fxs[j].Dist }
+func (fxs LotteryFxs) Swap(i, j int)      { fxs[i], fxs[j] = fxs[j], fxs[i] }

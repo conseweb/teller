@@ -58,7 +58,7 @@ func main() {
 			}
 			ticker.Stop()
 
-			// call sendLotteryFx 1000 times, means there are 1000 farmer
+			// call sendLotteryFx 10000 times, means there are 10000 farmer
 			go func() {
 				semaF := semaphore.NewSemaphore(16)
 				for i := 0; i < 10000; i++ {
