@@ -173,4 +173,18 @@ RET:
 	return rsp, nil
 }
 
+// get lottery result to verify or someelse use
+func (la *lotteryAPI) GetLotteryResult(ctx context.Context, req *pb.GetLotteryResultReq) (*pb.GetLotteryResultRsp, error) {
+	rsp := &pb.GetLotteryResultRsp{
+		Error: pb.ResponseOK(),
+	}
 
+	s := la.lottery.storageMgr.GetStorage(req.LotteryName)
+	rsp.Result = &pb.LotteryResult{
+		Name: s.GetName(),
+		Fxs:  s.GetFxs(),
+		Lxs:  s.GetLxs(),
+	}
+
+	return rsp, nil
+}

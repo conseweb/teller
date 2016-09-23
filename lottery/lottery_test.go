@@ -40,8 +40,8 @@ type LotteryTest struct {
 func (t *LotteryTest) SetUpTest(c *check.C) {
 	viper.Set("lottery.interval", "4s")
 	viper.Set("lottery.last", "2s")
-	viper.Set("lottery.seat", 4)
-	viper.Set("lottery.worker", 16)
+	viper.Set("lottery.ledger", 4)
+	viper.Set("lottery.farmer", 16)
 	viper.Set("logging.lottery", "debug")
 
 	lottery := NewLottery()

@@ -129,7 +129,7 @@ func (l *Lottery) lotteryLastCheck(ticker *time.Ticker) {
 		return
 	}
 
-	l.storageMgr.HandleLottery(l.curLotteryName, viper.GetInt("lottery.seat"), viper.GetInt("lottery.worker"))
+	l.storageMgr.HandleLottery(l.curLotteryName, viper.GetInt("lottery.ledger"), viper.GetInt("lottery.farmer"))
 	l.storageMgr.DisplayLotteryResult(l.curLotteryName)
 
 	l.lotteryStartTime = 0

@@ -35,10 +35,10 @@ lottery:
   last: 30s
 
   # how many ledger will win the seat
-  seat: 10
+  ledger: 10
 
-  # how many worker will handle farmer's vote at the same time
-  worker: 16
+  # how many percent(1000) farmer near the seat ledger will get coinbase, value:[0, 1000]
+  farmer: 1
 #################################################################################################
 #
 # logging section
