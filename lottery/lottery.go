@@ -44,7 +44,7 @@ var (
 
 // Lottery
 type Lottery struct {
-	gRPCServer *grpc.Server
+	gRPCServer *grpc1.Server
 	storageMgr *StorageManager
 
 	lotteryInterval time.Duration
@@ -167,7 +167,7 @@ func (l *Lottery) StartNewLottery(startTime time.Time, lastInterval time.Duratio
 }
 
 // Start start Lottery api
-func (l *Lottery) Start(srv *grpc.Server) {
+func (l *Lottery) Start(srv *grpc1.Server) {
 	lotteryLogger.Info("lottery service starting...")
 
 	l.gRPCServer = srv
