@@ -45,7 +45,7 @@ func (t *LotteryTest) SetUpTest(c *check.C) {
 	viper.Set("logging.lottery", "debug")
 
 	lottery := NewLottery()
-	lottery.Start(grpc.NewServer())
+	lottery.Start(grpc1.NewServer())
 
 	t.api = &lotteryAPI{lottery}
 }

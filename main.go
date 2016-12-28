@@ -44,15 +44,15 @@ func main() {
 	logger.Infof("Teller server version %s", viper.GetString("server.version"))
 	runtime.GOMAXPROCS(viper.GetInt("server.gomaxprocs"))
 
-	opts := make([]grpc.ServerOption, 0)
+	opts := make([]grpc1.ServerOption, 0)
 	if viper.GetBool("server.tls.enabled") {
 		creds, err := credentials.NewServerTLSFromFile(viper.GetString("server.tls.cert.file"), viper.GetString("server.tls.key.file"))
 		if err != nil {
 			logger.Fatalf("create tls cert error: %v", err)
 		}
-		opts = append(opts, grpc.Creds(creds))
+		opts = append(opts, grpc1.Creds(creds))
 	}
-	srv := grpc.NewServer(opts...)
+	srv := grpc1.NewServer(opts...)
 
 	// lottery module
 	lot = lottery.NewLottery()
